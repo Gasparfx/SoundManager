@@ -520,9 +520,12 @@ public class SoundManager : MonoBehaviour
         soundPrefab = Resources.Load<GameObject>(soundPrefabPath);
         voicePrefab = Resources.Load<GameObject>(voicePrefabPath);
 
-        Debug.Assert(musicPrefab != null, "Music prefab not found");
-        Debug.Assert(soundPrefab != null, "Music prefab not found");
-        Debug.Assert(voicePrefab != null, "Music prefab not found");
+        if (musicPrefab == null)
+            Debug.LogError("Music prefab not found");
+        if (soundPrefab == null)
+            Debug.LogError("Sound prefab not found");
+        if (voicePrefab == null)
+            Debug.LogError("Voice prefab not found");
 
         LoadSettings();
     }
