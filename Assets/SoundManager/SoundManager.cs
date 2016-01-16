@@ -214,7 +214,7 @@ public class SoundManager : MonoBehaviour
                 return _instance;
             }
 
-            // Do not modify _instance here. It will be assigned in awake to work.
+            // Do not modify _instance here. It will be assigned in awake
             return new GameObject("(singleton) SoundManager").AddComponent<SoundManager>();
         }
     }
