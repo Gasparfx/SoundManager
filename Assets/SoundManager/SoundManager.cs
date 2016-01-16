@@ -17,7 +17,6 @@ public class SoundManager : MonoBehaviour
     const string musicPrefabPath = "Sounds/MusicPrefab";
     const string soundPrefabPath = "Sounds/SoundPrefab";
     const string voicePrefabPath = "Sounds/VoicePrefab";
-    const string PrefabPath      = "Sounds/SoundManager";
 
     List<AudioSource> _sounds = new List<AudioSource>();
     AudioSource _currentMusicSource;
@@ -198,8 +197,6 @@ public class SoundManager : MonoBehaviour
 #region Singleton
     private static SoundManager _instance;
 
-    private static object _lock = new object();
-
     public static SoundManager Instance
     {
         get
@@ -212,42 +209,13 @@ public class SoundManager : MonoBehaviour
                 return null;
             }
 
-            lock (_lock)
+            if (_instance != null)
             {
-                if (_instance == null)
-                {
-                    _instance = (SoundManager)FindObjectOfType(typeof(SoundManager));
-
-                    if (FindObjectsOfType(typeof(SoundManager)).Length > 1)
-                    {
-                        Debug.LogError("[Singleton] Something went really wrong " +
-                            " - there should never be more than 1 singleton!" +
-                            " Reopenning the scene might fix it.");
-                        return _instance;
-                    }
-
-                    if (_instance == null)
-                    {
-                        GameObject singleton = (GameObject)Instantiate(Resources.Load<GameObject>(PrefabPath));
-                        _instance = singleton.GetComponent<SoundManager>();
-                        singleton.name = "(singleton) " + typeof(SoundManager).ToString();
-
-                        DontDestroyOnLoad(singleton);
-                        //_instance.LoadSettings();
-
-                        Debug.Log("[Singleton] An instance of " + typeof(SoundManager) +
-                            " is needed in the scene, so '" + singleton +
-                            "' was created with DontDestroyOnLoad.");
-                    }
-                    else
-                    {
-                        Debug.Log("[Singleton] Using instance already created: " +
-                            _instance.gameObject.name);
-                    }
-                }
-
                 return _instance;
             }
+
+            // Do not modify _instance here. It will be assigned in awake to work.
+            return new GameObject("(singleton) SoundManager").AddComponent<SoundManager>();
         }
     }
 
@@ -489,7 +457,7 @@ public class SoundManager : MonoBehaviour
 
     #endregion // Sound
 
-    #region Voice
+#region Voice
 
     void StopVoicesInternal()
     {
@@ -516,12 +484,21 @@ public class SoundManager : MonoBehaviour
         return _voiceBusy;
     }
 
-    #endregion // Voice
+#endregion // Voice
 
-    #region Internal
+#region Internal
 
     void Awake()
     {
+        // Only one instance of SoundManager at a time!
+        if (_instance != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        _instance = this;
+        DontDestroyOnLoad(gameObject);
+
         musicPrefab = Resources.Load<GameObject>(musicPrefabPath);
         soundPrefab = Resources.Load<GameObject>(soundPrefabPath);
         voicePrefab = Resources.Load<GameObject>(voicePrefabPath);
