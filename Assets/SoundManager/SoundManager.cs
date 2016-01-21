@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Audio;
 
 public class SoundManager : MonoBehaviour
 {
@@ -14,9 +15,9 @@ public class SoundManager : MonoBehaviour
 
     public string languageFolder = "";
 
-    const string musicPrefabPath = "Sounds/MusicPrefab";
-    const string soundPrefabPath = "Sounds/SoundPrefab";
-    const string voicePrefabPath = "Sounds/VoicePrefab";
+    private AudioMixerGroup musicAudioMixerGroup;
+    private AudioMixerGroup soundAudioMixerGroup;
+    private AudioMixerGroup voiceAudioMixerGroup;
 
     List<AudioSource> _sounds = new List<AudioSource>();
     AudioSource _currentMusicSource;
@@ -25,10 +26,6 @@ public class SoundManager : MonoBehaviour
     bool _voiceBusy;
     bool _currentVoiceKilled;
     string _currentMusicName;
-
-    GameObject musicPrefab;
-    GameObject soundPrefab;
-    GameObject voicePrefab;
 
     bool isFading;
     float fadeTimer;
@@ -331,13 +328,16 @@ public class SoundManager : MonoBehaviour
 
         AudioClip musicClip = LoadClip("Music/" + musicName);
 
-        GameObject music = (GameObject)Instantiate(musicPrefab);
-        if (null == music) {
-            Debug.Log("Music not found: " + musicName);
-        }
+        GameObject music = new GameObject("Music: " + musicName);
+        AudioSource musicSource = music.AddComponent<AudioSource>();
+
         music.transform.parent = transform;
 
-        AudioSource musicSource = music.GetComponent<AudioSource>();
+        musicSource.outputAudioMixerGroup = musicAudioMixerGroup;
+        
+        musicSource.loop = true;
+        musicSource.priority = 0;
+        musicSource.playOnAwake = false;
         musicSource.mute = _mutedMusic;
         musicSource.ignoreListenerPause = true;
         musicSource.clip = musicClip;
@@ -401,10 +401,13 @@ public class SoundManager : MonoBehaviour
             Debug.Log("Sound not loaded: " + soundName);
         }
 
-        GameObject sound = (GameObject)Instantiate(soundPrefab);
+        GameObject sound = new GameObject("Sound: " + soundName);
+        AudioSource soundSource = sound.AddComponent<AudioSource>();
         sound.transform.parent = transform;
 
-        AudioSource soundSource = sound.GetComponent<AudioSource>();
+        soundSource.outputAudioMixerGroup = soundAudioMixerGroup;
+        soundSource.priority = 128;
+        soundSource.playOnAwake = false;
         soundSource.mute = _mutedSound;
         soundSource.volume = _volumeSound * DefaultSoundVolume;
         soundSource.clip = soundClip;
@@ -428,10 +431,13 @@ public class SoundManager : MonoBehaviour
             Debug.Log("Sound not loaded: " + soundName);
         }
 
-        GameObject sound = (GameObject)Instantiate(soundPrefab);
+        GameObject sound = new GameObject("Sound: " + soundName);
+        AudioSource soundSource = sound.AddComponent<AudioSource>();
         sound.transform.parent = transform;
 
-        AudioSource soundSource = sound.GetComponent<AudioSource>();
+        soundSource.outputAudioMixerGroup = soundAudioMixerGroup;
+        soundSource.priority = 128;
+        soundSource.playOnAwake = false;
         soundSource.mute = _mutedSound;
         soundSource.volume = _volumeSound * DefaultSoundVolume;
         soundSource.clip = soundClip;
@@ -499,16 +505,19 @@ public class SoundManager : MonoBehaviour
         _instance = this;
         DontDestroyOnLoad(gameObject);
 
-        musicPrefab = Resources.Load<GameObject>(musicPrefabPath);
-        soundPrefab = Resources.Load<GameObject>(soundPrefabPath);
-        voicePrefab = Resources.Load<GameObject>(voicePrefabPath);
+        AudioMixer mixer = Resources.Load<AudioMixer>("Sounds/AudioMixer");
 
-        if (musicPrefab == null)
-            Debug.LogError("Music prefab not found");
-        if (soundPrefab == null)
-            Debug.LogError("Sound prefab not found");
-        if (voicePrefab == null)
-            Debug.LogError("Voice prefab not found");
+        AudioMixerGroup[] groups = mixer.FindMatchingGroups("Music");
+        if (groups.Length > 0)
+            musicAudioMixerGroup = groups[0];
+
+        groups = mixer.FindMatchingGroups("Sounds");
+        if (groups.Length > 0)
+            soundAudioMixerGroup = groups[0];
+
+        groups = mixer.FindMatchingGroups("Voice");
+        if (groups.Length > 0)
+            voiceAudioMixerGroup = groups[0];
 
         LoadSettings();
     }
@@ -567,10 +576,14 @@ public class SoundManager : MonoBehaviour
             if (_currentVoiceKilled)
                 continue;
 
-            GameObject voice = (GameObject)Instantiate(voicePrefab);
+            GameObject voice = new GameObject("Voice: " + next.name);
+
             voice.transform.parent = transform;
 
-            _currentVoiceSource = voice.GetComponent<AudioSource>();
+            _currentVoiceSource = voice.AddComponent<AudioSource>();
+            _currentVoiceSource.outputAudioMixerGroup = voiceAudioMixerGroup;
+            _currentVoiceSource.priority = 64;
+            _currentVoiceSource.playOnAwake = false;
             _currentVoiceSource.mute = _mutedVoice;
             _currentVoiceSource.volume = _volumeVoice * DefaultVoiceVolume;
             _currentVoiceSource.ignoreListenerPause = false;
