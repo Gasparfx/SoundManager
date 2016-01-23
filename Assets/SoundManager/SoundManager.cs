@@ -15,9 +15,9 @@ public class SoundManager : MonoBehaviour
 
     public string languageFolder = "";
 
-    private AudioMixerGroup musicAudioMixerGroup;
-    private AudioMixerGroup soundAudioMixerGroup;
-    private AudioMixerGroup voiceAudioMixerGroup;
+    public AudioMixerGroup musicAudioMixerGroup;
+    public AudioMixerGroup soundAudioMixerGroup;
+    public AudioMixerGroup voiceAudioMixerGroup;
 
     List<AudioSource> _sounds = new List<AudioSource>();
     AudioSource _currentMusicSource;
@@ -212,7 +212,16 @@ public class SoundManager : MonoBehaviour
             }
 
             // Do not modify _instance here. It will be assigned in awake
-            return new GameObject("(singleton) SoundManager").AddComponent<SoundManager>();
+            GameObject prefabFromResources = Resources.Load<GameObject>("SoundManager/SoundManager");
+            if (prefabFromResources != null)
+            {
+                prefabFromResources = Instantiate<GameObject>(prefabFromResources);
+                prefabFromResources.name = "SoundManager (singleton)";
+                return prefabFromResources.GetComponent<SoundManager>();
+            }
+
+            Debug.LogWarning("SoundManager prefab not found in Resources. It will be created with default settings.");
+            return new GameObject("SoundManager (singleton)").AddComponent<SoundManager>();
         }
     }
 
@@ -505,20 +514,6 @@ public class SoundManager : MonoBehaviour
         _instance = this;
         DontDestroyOnLoad(gameObject);
 
-        AudioMixer mixer = Resources.Load<AudioMixer>("Sounds/AudioMixer");
-
-        AudioMixerGroup[] groups = mixer.FindMatchingGroups("Music");
-        if (groups.Length > 0)
-            musicAudioMixerGroup = groups[0];
-
-        groups = mixer.FindMatchingGroups("Sounds");
-        if (groups.Length > 0)
-            soundAudioMixerGroup = groups[0];
-
-        groups = mixer.FindMatchingGroups("Voice");
-        if (groups.Length > 0)
-            voiceAudioMixerGroup = groups[0];
-
         LoadSettings();
     }
 
@@ -701,14 +696,14 @@ public class SoundManager : MonoBehaviour
 
     AudioClip LoadClip(string name)
     {
-        string path = "Sounds/" + name;
+        string path = "SoundManager/" + name;
         AudioClip clip = Resources.Load<AudioClip>(path);
         return clip;
     }
 
     ResourceRequest LoadClipAsync(string name)
     {
-        string path = "Sounds/" + name;
+        string path = "SoundManager/" + name;
         return Resources.LoadAsync<AudioClip>(path);
     }
 
