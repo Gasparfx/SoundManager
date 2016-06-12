@@ -5,58 +5,21 @@ using UnityEngine.Audio;
 
 public class SoundManager : MonoBehaviour
 {
-    const bool AutoPause = true;
+    private SoundManagerSettings _settings;
 
-    const float DefaultMusicVolume = 1f;
-    const float DefaultSoundVolume = 0.9f;
-    const float DefaultVoiceVolume = 1f;
 
-    const float MusicFadeTime = 2f;
-
-    public string languageFolder = "";
-
-    public AudioMixerGroup musicAudioMixerGroup;
-    public AudioMixerGroup soundAudioMixerGroup;
-    public AudioMixerGroup voiceAudioMixerGroup;
-
-    List<AudioSource> _sounds = new List<AudioSource>();
+    List<SMSoundHandler> _sounds = new List<SMSoundHandler>();
     AudioSource _currentMusicSource;
-    AudioSource _currentVoiceSource;
 
-    bool _voiceBusy;
-    bool _currentVoiceKilled;
     string _currentMusicName;
 
-    bool isFading;
-    float fadeTimer;
-
-    struct NextVoice
-    {
-        public string name;
-        public float delay;
-    }
-
-    List<NextVoice> _voicesQueue = new List<NextVoice>();
-
-    struct MusicFader
-    {
-        public AudioSource audio;
-        public float timer;
-        public float fadingTime;
-        public float startVolume;
-        public float targetVolume;
-        public bool destroyOnComplete;
-    }
-
-    List<MusicFader> _musicFadings = new List<MusicFader>();
+    List<SMMusicHandler> _musicFadings = new List<SMMusicHandler>();
 
     float _volumeMusic;
     float _volumeSound;
-    float _volumeVoice;
 
     bool _mutedMusic;
     bool _mutedSound;
-    bool _mutedVoice;
 
 #region Public functions
 
@@ -80,24 +43,9 @@ public class SoundManager : MonoBehaviour
         Instance.PlaySoundWithDelayInternal(name, delay, pausable);
     }
 
-    public static void PlayVoice(string voiceName, float delay = 0, bool killOtherVoices = true)
-    {
-        Instance.PlayVoiceInternal(voiceName, delay, killOtherVoices);
-    }
-
-    public static void StopVoices()
-    {
-        Instance.StopVoicesInternal();
-    }
-
-    public static bool IsVoicePlaying()
-    {
-        return Instance.IsVoicePlayingInternal();
-    }
-
     public static void Pause()
     {
-        if (AutoPause)
+        if (Instance._settings.AutoPause)
             return;
 
         // Supress Unreachable code warning
@@ -108,7 +56,7 @@ public class SoundManager : MonoBehaviour
 
     public static void UnPause()
     {
-        if (AutoPause)
+        if (Instance._settings.AutoPause)
             return;
 
         // Supress Unreachable code warning
@@ -166,29 +114,6 @@ public class SoundManager : MonoBehaviour
         return Instance.GetSoundMutedInternal();
     }
 
-    // Volume [0 - 1]
-    public static void SetVoiceVolume(float volume)
-    {
-        Instance.SetVoiceVolumeInternal(volume);
-    }
-
-    // Volume [0 - 1]
-    public static float GetVoiceVolume()
-    {
-        return Instance.GetVoiceVolumeInternal();
-    }
-
-    public static void SetVoiceMuted(bool mute)
-    {
-        Instance.SetVoiceMutedInternal(mute);
-    }
-
-    public static bool GetVoiceMuted()
-    {
-        return Instance.GetVoiceMutedInternal();
-    }
-
-
 #endregion
 
 #region Singleton
@@ -211,16 +136,6 @@ public class SoundManager : MonoBehaviour
                 return _instance;
             }
 
-            // Do not modify _instance here. It will be assigned in awake
-            GameObject prefabFromResources = Resources.Load<GameObject>("SoundManager/SoundManager");
-            if (prefabFromResources != null)
-            {
-                prefabFromResources = Instantiate<GameObject>(prefabFromResources);
-                prefabFromResources.name = "SoundManager (singleton)";
-                return prefabFromResources.GetComponent<SoundManager>();
-            }
-
-            Debug.LogWarning("SoundManager prefab not found in Resources. It will be created with default settings.");
             return new GameObject("SoundManager (singleton)").AddComponent<SoundManager>();
         }
     }
@@ -291,30 +206,6 @@ public class SoundManager : MonoBehaviour
         return _mutedSound;
     }
 
-    void SetVoiceVolumeInternal(float volume)
-    {
-        _volumeVoice = volume;
-        SaveSettings();
-        ApplyVoiceVolume();
-    }
-
-    float GetVoiceVolumeInternal()
-    {
-        return _volumeVoice;
-    }
-
-    void SetVoiceMutedInternal(bool mute)
-    {
-        _mutedVoice = mute;
-        SaveSettings();
-        ApplyVoiceMuted();
-    }
-
-    bool GetVoiceMutedInternal()
-    {
-        return _mutedVoice;
-    }
-
 #endregion // Settings
 
 #region Music
@@ -342,7 +233,7 @@ public class SoundManager : MonoBehaviour
 
         music.transform.parent = transform;
 
-        musicSource.outputAudioMixerGroup = musicAudioMixerGroup;
+        musicSource.outputAudioMixerGroup = _settings.MusicAudioMixerGroup;
         
         musicSource.loop = true;
         musicSource.priority = 0;
@@ -353,7 +244,7 @@ public class SoundManager : MonoBehaviour
         musicSource.Play();
 
         musicSource.volume = 0;
-        StartFadeMusic(musicSource, MusicFadeTime, _volumeMusic * DefaultMusicVolume, false);
+        StartFadeMusic(musicSource, _settings.MusicFadeTime, _volumeMusic * _settings.DefaultMusicVolume, false);
         //musicSource.DOFade(_volumeMusic * DefaultMusicVolume, MusicFadeTime).SetUpdate(true);
 
         _currentMusicSource = musicSource;
@@ -364,7 +255,7 @@ public class SoundManager : MonoBehaviour
         _currentMusicName = "";
         if (_currentMusicSource != null)
         {
-            StartFadeMusic(_currentMusicSource, MusicFadeTime, 0, true);
+            StartFadeMusic(_currentMusicSource, _settings.MusicFadeTime, 0, true);
             _currentMusicSource = null;
         }
     }
@@ -381,9 +272,9 @@ public class SoundManager : MonoBehaviour
         }
 
         int sameCountGuard = 0;
-        foreach (AudioSource audioSource in _sounds)
+        foreach (SMSoundHandler sound in _sounds)
         {
-            if (audioSource.clip.name == soundName)
+            if (sound.Source.clip.name == soundName)
                 sameCountGuard++;
         }
 
@@ -398,32 +289,7 @@ public class SoundManager : MonoBehaviour
             return;
         }
 
-        //PlaySoundInternalNow(soundName, pausable);
         StartCoroutine(PlaySoundInternalSoon(soundName, pausable));
-    }
-
-    void PlaySoundInternalNow(string soundName, bool pausable)
-    {
-        AudioClip soundClip = LoadClip("Sounds/" + soundName);
-        if (null == soundClip)
-        {
-            Debug.Log("Sound not loaded: " + soundName);
-        }
-
-        GameObject sound = new GameObject("Sound: " + soundName);
-        AudioSource soundSource = sound.AddComponent<AudioSource>();
-        sound.transform.parent = transform;
-
-        soundSource.outputAudioMixerGroup = soundAudioMixerGroup;
-        soundSource.priority = 128;
-        soundSource.playOnAwake = false;
-        soundSource.mute = _mutedSound;
-        soundSource.volume = _volumeSound * DefaultSoundVolume;
-        soundSource.clip = soundClip;
-        soundSource.Play();
-        soundSource.ignoreListenerPause = !pausable;
-
-        _sounds.Add(soundSource);
     }
 
     IEnumerator PlaySoundInternalSoon(string soundName, bool pausable)
@@ -444,16 +310,19 @@ public class SoundManager : MonoBehaviour
         AudioSource soundSource = sound.AddComponent<AudioSource>();
         sound.transform.parent = transform;
 
-        soundSource.outputAudioMixerGroup = soundAudioMixerGroup;
+        soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
         soundSource.priority = 128;
         soundSource.playOnAwake = false;
         soundSource.mute = _mutedSound;
-        soundSource.volume = _volumeSound * DefaultSoundVolume;
+        soundSource.volume = _volumeSound * _settings.DefaultSoundVolume;
         soundSource.clip = soundClip;
         soundSource.Play();
         soundSource.ignoreListenerPause = !pausable;
 
-        _sounds.Add(soundSource);
+        SMSoundHandler soundHandler = new SMSoundHandler();
+        soundHandler.Source = soundSource;
+
+        _sounds.Add(soundHandler);
     }
 
     void PlaySoundWithDelayInternal(string soundName, float delay, bool pausable)
@@ -463,43 +332,14 @@ public class SoundManager : MonoBehaviour
 
     void StopAllPausableSoundsInternal()
     {
-        foreach (AudioSource sound in _sounds)
+        foreach (SMSoundHandler sound in _sounds)
         {
-            if (!sound.ignoreListenerPause)
-                sound.Stop();
+            if (!sound.Source.ignoreListenerPause)
+                sound.Source.Stop();
         }
     }
 
     #endregion // Sound
-
-#region Voice
-
-    void StopVoicesInternal()
-    {
-        KillAllVoices();
-    }
-
-    void PlayVoiceInternal(string voiceName, float delay = 0, bool killOtherVoices = true)
-    {
-        if (killOtherVoices)
-            KillAllVoices();
-
-        if (string.IsNullOrEmpty(voiceName))
-            return;
-
-        NextVoice next = new NextVoice();
-        next.name = voiceName;
-        next.delay = delay;
-
-        _voicesQueue.Add(next);
-    }
-
-    bool IsVoicePlayingInternal()
-    {
-        return _voiceBusy;
-    }
-
-#endregion // Voice
 
 #region Internal
 
@@ -514,107 +354,27 @@ public class SoundManager : MonoBehaviour
         _instance = this;
         DontDestroyOnLoad(gameObject);
 
-        LoadSettings();
-    }
-
-    void Start()
-    {
-        StartCoroutine(VoicesCoroutine());
-    }
-
-
-    IEnumerator VoicesCoroutine()
-    {
-        while (true)
+        _settings = Resources.Load<SoundManagerSettings>("SoundManagerSettings");
+        if (_settings == null)
         {
-            _voiceBusy = false;
-            // Wait next voice
-            while (_voicesQueue.Count == 0)
-            {
-                yield return null;
-            }
-            _voiceBusy = true;
-
-            NextVoice next = _voicesQueue[0];
-            _voicesQueue.RemoveAt(0);
-            _currentVoiceKilled = false;
-
-            float timer = next.delay;
-            while (timer > 0 && !_currentVoiceKilled)
-            {
-                timer -= Time.deltaTime;
-                yield return null;
-            }
-
-            if (_currentVoiceKilled)
-                continue;
-
-
-            string voiceFile;
-            if (string.IsNullOrEmpty(languageFolder))
-            {
-                voiceFile = "Voices/" + next.name;
-            } else
-            {
-                voiceFile = "Voices/" + languageFolder + "/" + next.name;
-            }
-
-            // Play voice
-            ResourceRequest request = LoadClipAsync(voiceFile);
-            while (!request.isDone)
-            {
-                yield return null;
-            }
-
-            AudioClip voiceClip = (AudioClip) request.asset;
-
-            if (_currentVoiceKilled)
-                continue;
-
-            GameObject voice = new GameObject("Voice: " + next.name);
-
-            voice.transform.parent = transform;
-
-            _currentVoiceSource = voice.AddComponent<AudioSource>();
-            _currentVoiceSource.outputAudioMixerGroup = voiceAudioMixerGroup;
-            _currentVoiceSource.priority = 64;
-            _currentVoiceSource.playOnAwake = false;
-            _currentVoiceSource.mute = _mutedVoice;
-            _currentVoiceSource.volume = _volumeVoice * DefaultVoiceVolume;
-            _currentVoiceSource.ignoreListenerPause = false;
-            _currentVoiceSource.clip = voiceClip;
-            _currentVoiceSource.Play();
-
-            // Wait voice over or killed
-            while (_currentVoiceSource.isPlaying)
-            {
-                if (_currentVoiceKilled)
-                {
-                    _currentVoiceSource.Stop();
-                    break;
-                }
-                yield return null;
-            }
-
-            _currentVoiceSource = null;
-            Destroy(voice);
-
-            yield return null;
+            Debug.LogWarning("SoundManagerSettings not foundin resources. Using default settings");
+            _settings = ScriptableObject.CreateInstance<SoundManagerSettings>();
         }
 
+        LoadSettings();
     }
 
     void Update()
     {
-        var soundsToDelete = _sounds.FindAll(sound => !sound.isPlaying);
+        var soundsToDelete = _sounds.FindAll(sound => !sound.Source.isPlaying);
 
-        foreach (AudioSource sound in soundsToDelete)
+        foreach (SMSoundHandler sound in soundsToDelete)
         {
             _sounds.Remove(sound);
-            Destroy(sound.gameObject);
+            Destroy(sound.Source.gameObject);
         }
 
-        if (AutoPause)
+        if (_settings.AutoPause)
         {
             bool curPause = Time.timeScale < 0.1f;
             if (curPause != AudioListener.pause)
@@ -625,8 +385,8 @@ public class SoundManager : MonoBehaviour
 
         for (int i = 0; i < _musicFadings.Count ; i++)
         {
-            MusicFader music = _musicFadings[i];
-            if (music.audio == null)
+            SMMusicHandler music = _musicFadings[i];
+            if (music.Source == null)
             {
                 _musicFadings.RemoveAt(i);
                 i--;
@@ -637,10 +397,10 @@ public class SoundManager : MonoBehaviour
                 _musicFadings[i] = music;
                 if (music.timer >= music.fadingTime)
                 {
-                    music.audio.volume = music.targetVolume;
+                    music.Source.volume = music.targetVolume;
                     if (music.destroyOnComplete)
                     {
-                        Destroy(music.audio.gameObject);
+                        Destroy(music.Source.gameObject);
                     }
                     _musicFadings.RemoveAt(i);
                     i--;
@@ -648,7 +408,7 @@ public class SoundManager : MonoBehaviour
                 else
                 {
                     float k = Mathf.Clamp01(music.timer / music.fadingTime);
-                    music.audio.volume = Mathf.Lerp(music.startVolume, music.targetVolume, k);
+                    music.Source.volume = Mathf.Lerp(music.startVolume, music.targetVolume, k);
                 }
             }
         }
@@ -658,12 +418,12 @@ public class SoundManager : MonoBehaviour
     {
         for (int i = 0; i < _musicFadings.Count; i++)
         {
-            MusicFader fader = _musicFadings[i];
-            if (fader.audio == music)
+            SMMusicHandler fader = _musicFadings[i];
+            if (fader.Source == music)
             {
                 if (fader.destroyOnComplete)
                 {
-                    Destroy(fader.audio.gameObject);
+                    Destroy(fader.Source.gameObject);
                 }
                 _musicFadings.RemoveAt(i);
                 return;
@@ -672,8 +432,8 @@ public class SoundManager : MonoBehaviour
     }
     void StartFadeMusic(AudioSource music, float duration, float targetVolume, bool destroyOnComplete)
     {
-        MusicFader fader;
-        fader.audio = music;
+        SMMusicHandler fader = new SMMusicHandler();
+        fader.Source = music;
         fader.fadingTime = duration;
         fader.timer = 0;
         fader.startVolume = music.volume;
@@ -707,47 +467,35 @@ public class SoundManager : MonoBehaviour
         return Resources.LoadAsync<AudioClip>(path);
     }
 
-    void KillAllVoices()
-    {
-        _currentVoiceKilled = true;
-        _voicesQueue.Clear();
-    }
-
     void SaveSettings()
     {
         PlayerPrefs.SetFloat("SM_MusicVolume", _volumeMusic);
         PlayerPrefs.SetFloat("SM_SoundVolume", _volumeSound);
-        PlayerPrefs.SetFloat("SM_VoiceVolume", _volumeVoice);
 
         PlayerPrefs.SetInt("SM_MusicMute", _mutedMusic ? 1 : 0);
         PlayerPrefs.SetInt("SM_SoundMute", _mutedSound ? 1 : 0);
-        PlayerPrefs.SetInt("SM_VoiceMute", _mutedVoice ? 1 : 0);
     }
 
     void LoadSettings()
     {
         _volumeMusic = PlayerPrefs.GetFloat("SM_MusicVolume", 1);
         _volumeSound = PlayerPrefs.GetFloat("SM_SoundVolume", 1);
-        _volumeVoice = PlayerPrefs.GetFloat("SM_VoiceVolume", 1);
 
         _mutedMusic = PlayerPrefs.GetInt("SM_MusicMute", 0) == 1;
         _mutedSound = PlayerPrefs.GetInt("SM_SoundMute", 0) == 1;
-        _mutedVoice = PlayerPrefs.GetInt("SM_VoiceMute", 0) == 1;
 
         ApplySoundVolume();
         ApplyMusicVolume();
-        ApplyVoiceVolume();
 
         ApplySoundMuted();
         ApplyMusicMuted();
-        ApplyVoiceMuted();
     }
 
     void ApplySoundVolume()
     {
-        foreach (AudioSource sound in _sounds)
+        foreach (SMSoundHandler sound in _sounds)
         {
-            sound.volume = _volumeSound * DefaultSoundVolume;
+            sound.Source.volume = _volumeSound * _settings.DefaultSoundVolume;
         }
     }
 
@@ -756,23 +504,15 @@ public class SoundManager : MonoBehaviour
         if (_currentMusicSource != null)
         {
             StopFadingForMusic(_currentMusicSource);
-            _currentMusicSource.volume = _volumeMusic * DefaultMusicVolume;
-        }
-    }
-
-    void ApplyVoiceVolume()
-    {
-        if (_currentMusicSource != null)
-        {
-            _currentVoiceSource.volume = _volumeMusic * DefaultVoiceVolume;
+            _currentMusicSource.volume = _volumeMusic * _settings.DefaultMusicVolume;
         }
     }
 
     void ApplySoundMuted()
     {
-        foreach (AudioSource sound in _sounds)
+        foreach (SMSoundHandler sound in _sounds)
         {
-            sound.mute = _mutedSound;
+            sound.Source.mute = _mutedSound;
         }
     }
 
@@ -781,14 +521,6 @@ public class SoundManager : MonoBehaviour
         if (_currentMusicSource != null)
         {
             _currentMusicSource.mute = _mutedMusic;
-        }
-    }
-
-    void ApplyVoiceMuted()
-    {
-        if (_currentVoiceSource != null)
-        {
-            _currentVoiceSource.mute = _mutedVoice;
         }
     }
 
