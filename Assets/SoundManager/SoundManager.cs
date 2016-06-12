@@ -7,19 +7,13 @@ public class SoundManager : MonoBehaviour
 {
     private SoundManagerSettings _settings;
 
-
     List<SMSoundHandler> _sounds = new List<SMSoundHandler>();
-    AudioSource _currentMusicSource;
 
+    SMMusicHandler _music;
     string _currentMusicName;
 
-    List<SMMusicHandler> _musicFadings = new List<SMMusicHandler>();
+    List<SMMusicFadingOut> _musicFadingsOut = new List<SMMusicFadingOut>();
 
-    float _volumeMusic;
-    float _volumeSound;
-
-    bool _mutedMusic;
-    bool _mutedSound;
 
 #region Public functions
 
@@ -73,45 +67,49 @@ public class SoundManager : MonoBehaviour
     // Volume [0 - 1]
     public static void SetMusicVolume(float volume)
     {
-        Instance.SetMusicVolumeInternal(volume);
+        Instance._settings.SetMusicVolumeInternal(volume);
+        Instance.ApplyMusicVolume();
     }
 
     // Volume [0 - 1]
     public static float GetMusicVolume()
     {
-        return Instance.GetMusicVolumeInternal();
+        return Instance._settings.GetMusicVolumeInternal();
     }
 
     public static void SetMusicMuted(bool mute)
     {
-        Instance.SetMusicMutedInternal(mute);
+        Instance._settings.SetMusicMuted(mute);
+        Instance.ApplyMusicMuted();
     }
 
     public static bool GetMusicMuted()
     {
-        return Instance.GetMusicMutedInternal();
+        return Instance._settings.GetMusicMuted();
     }
 
     // Volume [0 - 1]
     public static void SetSoundVolume(float volume)
     {
-        Instance.SetSoundVolumeInternal(volume);
+        Instance._settings.SetSoundVolumeInternal(volume);
+        Instance.ApplySoundVolume();
     }
 
     // Volume [0 - 1]
     public static float GetSoundVolume()
     {
-        return Instance.GetSoundVolumeInternal();
+        return Instance._settings.GetSoundVolumeInternal();
     }
 
     public static void SetSoundMuted(bool mute)
     {
-        Instance.SetSoundMutedInternal(mute);
+        Instance._settings.SetSoundMuted(mute);
+        Instance.ApplySoundMuted();
     }
 
     public static bool GetSoundMuted()
     {
-        return Instance.GetSoundMutedInternal();
+        return Instance._settings.GetSoundMuted();
     }
 
 #endregion
@@ -158,53 +156,6 @@ public class SoundManager : MonoBehaviour
 
 #region Settings
 
-    void SetMusicVolumeInternal(float volume)
-    {
-        _volumeMusic = volume;
-        SaveSettings();
-        ApplyMusicVolume();
-    }
-
-    float GetMusicVolumeInternal()
-    {
-        return _volumeMusic;
-    }
-
-    void SetMusicMutedInternal(bool mute)
-    {
-        _mutedMusic = mute;
-        SaveSettings();
-        ApplyMusicMuted();
-    }
-
-    bool GetMusicMutedInternal()
-    {
-        return _mutedMusic;
-    }
-
-    void SetSoundVolumeInternal(float volume)
-    {
-        _volumeSound = volume;
-        SaveSettings();
-        ApplySoundVolume();
-    }
-
-    float GetSoundVolumeInternal()
-    {
-        return _volumeSound;
-    }
-
-    void SetSoundMutedInternal(bool mute)
-    {
-        _mutedSound = mute;
-        SaveSettings();
-        ApplySoundMuted();
-    }
-
-    bool GetSoundMutedInternal()
-    {
-        return _mutedSound;
-    }
 
 #endregion // Settings
 
@@ -238,25 +189,28 @@ public class SoundManager : MonoBehaviour
         musicSource.loop = true;
         musicSource.priority = 0;
         musicSource.playOnAwake = false;
-        musicSource.mute = _mutedMusic;
+        musicSource.mute = _settings.GetMusicMuted();
         musicSource.ignoreListenerPause = true;
         musicSource.clip = musicClip;
         musicSource.Play();
 
         musicSource.volume = 0;
-        StartFadeMusic(musicSource, _settings.MusicFadeTime, _volumeMusic * _settings.DefaultMusicVolume, false);
-        //musicSource.DOFade(_volumeMusic * DefaultMusicVolume, MusicFadeTime).SetUpdate(true);
 
-        _currentMusicSource = musicSource;
+        _music = new SMMusicHandler();
+        _music.Source = musicSource;
+        _music.FadingIn = true;
+        _music.TargetVolume = _settings.GetMusicVolume();
+        _music.Timer = 0;
+        _music.FadingTime = _settings.MusicFadeTime;
     }
 
     void StopMusicInternal()
     {
         _currentMusicName = "";
-        if (_currentMusicSource != null)
+        if (_music != null)
         {
-            StartFadeMusic(_currentMusicSource, _settings.MusicFadeTime, 0, true);
-            _currentMusicSource = null;
+            StartFadingOutMusic();
+            _music = null;
         }
     }
 
@@ -313,8 +267,8 @@ public class SoundManager : MonoBehaviour
         soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
         soundSource.priority = 128;
         soundSource.playOnAwake = false;
-        soundSource.mute = _mutedSound;
-        soundSource.volume = _volumeSound * _settings.DefaultSoundVolume;
+        soundSource.mute = _settings.GetSoundMuted();
+        soundSource.volume = _settings.GetSoundVolume();
         soundSource.clip = soundClip;
         soundSource.Play();
         soundSource.ignoreListenerPause = !pausable;
@@ -361,7 +315,13 @@ public class SoundManager : MonoBehaviour
             _settings = ScriptableObject.CreateInstance<SoundManagerSettings>();
         }
 
-        LoadSettings();
+        _settings.LoadSettings();
+
+        ApplySoundVolume();
+        ApplyMusicVolume();
+
+        ApplySoundMuted();
+        ApplyMusicMuted();
     }
 
     void Update()
@@ -383,63 +343,59 @@ public class SoundManager : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < _musicFadings.Count ; i++)
+        for (int i = 0; i < _musicFadingsOut.Count ; i++)
         {
-            SMMusicHandler music = _musicFadings[i];
+            SMMusicFadingOut music = _musicFadingsOut[i];
             if (music.Source == null)
             {
-                _musicFadings.RemoveAt(i);
+                _musicFadingsOut.RemoveAt(i);
                 i--;
             }
             else
             {
-                music.timer += Time.unscaledDeltaTime;
-                _musicFadings[i] = music;
-                if (music.timer >= music.fadingTime)
+                music.Timer += Time.unscaledDeltaTime;
+                _musicFadingsOut[i] = music;
+                if (music.Timer >= music.FadingTime)
                 {
-                    music.Source.volume = music.targetVolume;
-                    if (music.destroyOnComplete)
-                    {
-                        Destroy(music.Source.gameObject);
-                    }
-                    _musicFadings.RemoveAt(i);
+                    Destroy(music.Source.gameObject);
+                    _musicFadingsOut.RemoveAt(i);
                     i--;
                 }
                 else
                 {
-                    float k = Mathf.Clamp01(music.timer / music.fadingTime);
-                    music.Source.volume = Mathf.Lerp(music.startVolume, music.targetVolume, k);
+                    float k = Mathf.Clamp01(music.Timer / music.FadingTime);
+                    music.Source.volume = Mathf.Lerp(music.StartVolume, 0, k);
                 }
+            }
+        }
+
+        if (_music != null && _music.FadingIn)
+        {
+            _music.Timer += Time.unscaledDeltaTime;
+            if (_music.Timer >= _music.FadingTime)
+            {
+                _music.Source.volume = _music.TargetVolume;
+                _music.FadingIn = false;
+            }
+            else
+            {
+                float k = Mathf.Clamp01(_music.Timer / _music.FadingTime);
+                _music.Source.volume = Mathf.Lerp(0, _music.TargetVolume, k);
             }
         }
     }
 
-    void StopFadingForMusic(AudioSource music)
+    void StartFadingOutMusic()
     {
-        for (int i = 0; i < _musicFadings.Count; i++)
+        if (_music != null)
         {
-            SMMusicHandler fader = _musicFadings[i];
-            if (fader.Source == music)
-            {
-                if (fader.destroyOnComplete)
-                {
-                    Destroy(fader.Source.gameObject);
-                }
-                _musicFadings.RemoveAt(i);
-                return;
-            }
+            SMMusicFadingOut fader = new SMMusicFadingOut();
+            fader.Source = _music.Source;
+            fader.FadingTime = _settings.MusicFadeTime;
+            fader.Timer = 0;
+            fader.StartVolume = _music.Source.volume;
+            _musicFadingsOut.Add(fader);
         }
-    }
-    void StartFadeMusic(AudioSource music, float duration, float targetVolume, bool destroyOnComplete)
-    {
-        SMMusicHandler fader = new SMMusicHandler();
-        fader.Source = music;
-        fader.fadingTime = duration;
-        fader.timer = 0;
-        fader.startVolume = music.volume;
-        fader.targetVolume = targetVolume;
-        fader.destroyOnComplete = destroyOnComplete;
-        _musicFadings.Add(fader);
     }
 
     private IEnumerator PlaySoundWithDelayCoroutine(string name, float delay, bool pausable)
@@ -467,44 +423,21 @@ public class SoundManager : MonoBehaviour
         return Resources.LoadAsync<AudioClip>(path);
     }
 
-    void SaveSettings()
-    {
-        PlayerPrefs.SetFloat("SM_MusicVolume", _volumeMusic);
-        PlayerPrefs.SetFloat("SM_SoundVolume", _volumeSound);
-
-        PlayerPrefs.SetInt("SM_MusicMute", _mutedMusic ? 1 : 0);
-        PlayerPrefs.SetInt("SM_SoundMute", _mutedSound ? 1 : 0);
-    }
-
-    void LoadSettings()
-    {
-        _volumeMusic = PlayerPrefs.GetFloat("SM_MusicVolume", 1);
-        _volumeSound = PlayerPrefs.GetFloat("SM_SoundVolume", 1);
-
-        _mutedMusic = PlayerPrefs.GetInt("SM_MusicMute", 0) == 1;
-        _mutedSound = PlayerPrefs.GetInt("SM_SoundMute", 0) == 1;
-
-        ApplySoundVolume();
-        ApplyMusicVolume();
-
-        ApplySoundMuted();
-        ApplyMusicMuted();
-    }
 
     void ApplySoundVolume()
     {
         foreach (SMSoundHandler sound in _sounds)
         {
-            sound.Source.volume = _volumeSound * _settings.DefaultSoundVolume;
+            sound.Source.volume = _settings.GetSoundVolume();
         }
     }
 
     void ApplyMusicVolume()
     {
-        if (_currentMusicSource != null)
+        if (_music != null)
         {
-            StopFadingForMusic(_currentMusicSource);
-            _currentMusicSource.volume = _volumeMusic * _settings.DefaultMusicVolume;
+            _music.FadingIn = false;
+            _music.Source.volume = _music.TargetVolume;
         }
     }
 
@@ -512,15 +445,15 @@ public class SoundManager : MonoBehaviour
     {
         foreach (SMSoundHandler sound in _sounds)
         {
-            sound.Source.mute = _mutedSound;
+            sound.Source.mute = _settings.GetSoundMuted();
         }
     }
 
     void ApplyMusicMuted()
     {
-        if (_currentMusicSource != null)
+        if (_music != null)
         {
-            _currentMusicSource.mute = _mutedMusic;
+            _music.Source.mute = _settings.GetMusicMuted();
         }
     }
 
