@@ -14,6 +14,8 @@ public class SoundManager : MonoBehaviour
 
     List<SMMusicFadingOut> _musicFadingsOut = new List<SMMusicFadingOut>();
 
+    private bool _loadingInProgress;
+
 
 #region Public functions
 
@@ -42,10 +44,7 @@ public class SoundManager : MonoBehaviour
         if (Instance._settings.AutoPause)
             return;
 
-        // Supress Unreachable code warning
-#pragma warning disable
         AudioListener.pause = true;
-#pragma warning restore
     }
 
     public static void UnPause()
@@ -53,10 +52,7 @@ public class SoundManager : MonoBehaviour
         if (Instance._settings.AutoPause)
             return;
 
-        // Supress Unreachable code warning
-#pragma warning disable
         AudioListener.pause = false;
-#pragma warning restore
     }
 
     public static void StopAllPausableSounds()
@@ -228,7 +224,7 @@ public class SoundManager : MonoBehaviour
         int sameCountGuard = 0;
         foreach (SMSoundHandler sound in _sounds)
         {
-            if (sound.Source.clip.name == soundName)
+            if (sound.Name == soundName)
                 sameCountGuard++;
         }
 
@@ -243,16 +239,46 @@ public class SoundManager : MonoBehaviour
             return;
         }
 
-        StartCoroutine(PlaySoundInternalSoon(soundName, pausable));
+
+        GameObject soundGameObject = new GameObject("Sound: " + soundName);
+        AudioSource soundSource = soundGameObject.AddComponent<AudioSource>();
+        soundGameObject.transform.parent = transform;
+
+        soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
+        soundSource.priority = 128;
+        soundSource.playOnAwake = false;
+        soundSource.mute = _settings.GetSoundMuted();
+        soundSource.volume = _settings.GetSoundVolume();
+        soundSource.ignoreListenerPause = !pausable;
+
+        SMSoundHandler soundHandler = new SMSoundHandler();
+        soundHandler.Source = soundSource;
+        soundHandler.Name = soundName;
+        soundHandler.IsLoading = true;
+
+        _sounds.Add(soundHandler);
+
+        soundHandler.LoadingCoroutine = PlaySoundInternalAfterLoad(soundHandler, soundName);
+        StartCoroutine(soundHandler.LoadingCoroutine);
     }
 
-    IEnumerator PlaySoundInternalSoon(string soundName, bool pausable)
+    IEnumerator PlaySoundInternalAfterLoad(SMSoundHandler handler, string soundName)
     {
+        // Need to wait others sounds to be loaded to avoid Android LoadingPersistentStorage lags
+        while (_loadingInProgress)
+        {
+            yield return null;
+        }
+
+        _loadingInProgress = true;
+        handler.IsPossessedLoading = true;
         ResourceRequest request = LoadClipAsync("Sounds/" + soundName);
         while (!request.isDone)
         {
             yield return null;
         }
+        handler.IsPossessedLoading = false;
+        _loadingInProgress = false;
 
         AudioClip soundClip = (AudioClip)request.asset;
         if (null == soundClip)
@@ -260,23 +286,9 @@ public class SoundManager : MonoBehaviour
             Debug.Log("Sound not loaded: " + soundName);
         }
 
-        GameObject sound = new GameObject("Sound: " + soundName);
-        AudioSource soundSource = sound.AddComponent<AudioSource>();
-        sound.transform.parent = transform;
-
-        soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
-        soundSource.priority = 128;
-        soundSource.playOnAwake = false;
-        soundSource.mute = _settings.GetSoundMuted();
-        soundSource.volume = _settings.GetSoundVolume();
-        soundSource.clip = soundClip;
-        soundSource.Play();
-        soundSource.ignoreListenerPause = !pausable;
-
-        SMSoundHandler soundHandler = new SMSoundHandler();
-        soundHandler.Source = soundSource;
-
-        _sounds.Add(soundHandler);
+        handler.IsLoading = false;
+        handler.Source.clip = soundClip;
+        handler.Source.Play();
     }
 
     void PlaySoundWithDelayInternal(string soundName, float delay, bool pausable)
@@ -289,7 +301,18 @@ public class SoundManager : MonoBehaviour
         foreach (SMSoundHandler sound in _sounds)
         {
             if (!sound.Source.ignoreListenerPause)
-                sound.Source.Stop();
+            {
+                if (sound.IsLoading)
+                {
+                    StopCoroutine(sound.LoadingCoroutine);
+                    if (sound.IsPossessedLoading)
+                        _loadingInProgress = false;
+
+                    sound.IsLoading = false;
+                }
+                else
+                    sound.Source.Stop();
+            }
         }
     }
 
@@ -326,7 +349,7 @@ public class SoundManager : MonoBehaviour
 
     void Update()
     {
-        var soundsToDelete = _sounds.FindAll(sound => !sound.Source.isPlaying);
+        var soundsToDelete = _sounds.FindAll(sound => !sound.IsLoading && !sound.Source.isPlaying);
 
         foreach (SMSoundHandler sound in soundsToDelete)
         {

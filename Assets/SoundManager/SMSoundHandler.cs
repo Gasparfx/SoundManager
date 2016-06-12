@@ -3,7 +3,11 @@ using System.Collections;
 
 public class SMSoundHandler
 {
-    private string _name;
+    public string Name;
     public AudioSource Source;
+
+    public bool IsLoading;
+    public IEnumerator LoadingCoroutine;
+    public bool IsPossessedLoading;
 
 }
