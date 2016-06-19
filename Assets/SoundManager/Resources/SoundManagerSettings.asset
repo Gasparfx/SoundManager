@@ -15,5 +15,7 @@ MonoBehaviour:
   DefaultMusicVolume: .5
   DefaultSoundVolume: 1
   MusicFadeTime: 2
-  MusicAudioMixerGroup: {fileID: 0}
-  SoundAudioMixerGroup: {fileID: 0}
+  MusicAudioMixerGroup: {fileID: 24331956, guid: 4cd8705c9141fa0438ec2ab9ffaf3e2c,
+    type: 2}
+  SoundAudioMixerGroup: {fileID: 24325162, guid: 4cd8705c9141fa0438ec2ab9ffaf3e2c,
+    type: 2}

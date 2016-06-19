@@ -6,8 +6,8 @@ public class SoundManagerSettings : ScriptableObject {
 
     public bool AutoPause = true;
 
-    public float DefaultMusicVolume = 1f;
-    public float DefaultSoundVolume = 1f;
+    public float MusicVolumeCorrection = 1f;
+    public float SoundVolumeCorrection = 1f;
 
     public float MusicFadeTime = 2f;
 
@@ -39,24 +39,24 @@ public class SoundManagerSettings : ScriptableObject {
         _mutedSound = PlayerPrefs.GetInt("SM_SoundMute", 0) == 1;
     }
 
-    public void SetMusicVolumeInternal(float volume)
+    public void SetMusicVolume(float volume)
     {
         _volumeMusic = volume;
         SaveSettings();
     }
 
-    public float GetMusicVolumeInternal()
+    public float GetMusicVolume()
     {
         return _volumeMusic;
     }
 
-    public void SetSoundVolumeInternal(float volume)
+    public void SetSoundVolume(float volume)
     {
         _volumeSound = volume;
         SaveSettings();
     }
 
-    public float GetSoundVolumeInternal()
+    public float GetSoundVolume()
     {
         return _volumeSound;
     }
@@ -84,14 +84,14 @@ public class SoundManagerSettings : ScriptableObject {
     }
 
 
-    public float GetSoundVolume()
+    public float GetSoundVolumeCorrected()
     {
-        return _volumeSound * DefaultSoundVolume;
+        return _volumeSound * SoundVolumeCorrection;
     }
 
-    public float GetMusicVolume()
+    public float GetMusicVolumeCorrected()
     {
-        return _volumeMusic * DefaultMusicVolume;
+        return _volumeMusic * MusicVolumeCorrection;
     }
 
 
