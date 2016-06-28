@@ -4,7 +4,14 @@ using System.Collections;
 
 public class SMSoundHandler
 {
+    private bool _valid;
     private SoundManager.SMSound _smSound;
+
+    public SMSoundHandler(SoundManager.SMSound sound)
+    {
+        _valid = sound != null;
+        _smSound = sound;
+    }
 
     public float GetVolume()
     {
@@ -20,6 +27,12 @@ public class SMSoundHandler
     public SMSoundHandler SetLooped(bool looped = true)
     {
         SoundManager.Instance.SetLooped(_smSound, looped);
+        return this;
+    }
+
+    public SMSoundHandler SetPausable(bool pausable)
+    {
+        SoundManager.Instance.SetPausable(_smSound, pausable);
         return this;
     }
 

@@ -17,7 +17,7 @@ public class Demo : MonoBehaviour {
 
     public void Click()
     {
-        SoundManager.PlaySound("click1", false);
+        SoundManager.PlaySoundUI("click1");
     }
 
     public void TogglePause()

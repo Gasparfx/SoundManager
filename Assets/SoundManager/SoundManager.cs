@@ -29,9 +29,24 @@ public class SoundManager : MonoBehaviour
         Instance.StopMusicInternal();
     }
 
-    public static void PlaySound(string name, bool pausable = true)
+    public static void PlaySound(string name, AssetBundle bundle)
     {
-        Instance.PlaySoundInternal(name, pausable);
+        Instance.PlaySoundInternal(name, true);
+    }
+
+    public static void PlaySoundUI(string name, AssetBundle bundle)
+    {
+        Instance.PlaySoundInternal(name, false);
+    }
+
+    public static void PlaySound(string name)
+    {
+        Instance.PlaySoundInternal(name, true);
+    }
+
+    public static void PlaySoundUI(string name)
+    {
+        Instance.PlaySoundInternal(name, false);
     }
 
     public static void PlaySoundWithDelay(string name, float delay, bool pausable = true)
@@ -125,6 +140,11 @@ public class SoundManager : MonoBehaviour
     public void SetLooped(SMSound smSound, bool looped)
     {
         smSound.Source.loop = looped;
+    }
+
+    public void SetPausable(SMSound smSound, bool pausable)
+    {
+        smSound.Source.ignoreListenerPause = !pausable;
     }
 
     public void Set3D(SMSound smSound, bool is3D)
@@ -288,15 +308,15 @@ public class SoundManager : MonoBehaviour
         }
     }
 
-#endregion // Music
+    #endregion // Music
 
-#region Sound
+    #region Sound
 
-    void PlaySoundInternal(string soundName, bool pausable)
+    SMSoundHandler PlaySoundInternal(string soundName, bool pausable, AssetBundle bundle = null)
     {
         if (string.IsNullOrEmpty(soundName)) {
             Debug.Log("Sound null or empty");
-            return;
+            return null;
         }
 
         int sameCountGuard = 0;
@@ -309,12 +329,12 @@ public class SoundManager : MonoBehaviour
         if (sameCountGuard > 8)
         {
             Debug.Log("Too much duplicates for sound: " + soundName);
-            return;
+            return null;
         }
 
         if (_sounds.Count > 16) {
             Debug.Log("Too much sounds");
-            return;
+            return null;
         }
 
 
@@ -337,11 +357,12 @@ public class SoundManager : MonoBehaviour
 
         _sounds.Add(sound);
 
-        sound.LoadingCoroutine = PlaySoundInternalAfterLoad(sound, soundName);
+        sound.LoadingCoroutine = PlaySoundInternalAfterLoad(sound, soundName, bundle);
         StartCoroutine(sound.LoadingCoroutine);
+        return new SMSoundHandler(sound);
     }
 
-    IEnumerator PlaySoundInternalAfterLoad(SMSound smSound, string soundName)
+    IEnumerator PlaySoundInternalAfterLoad(SMSound smSound, string soundName, AssetBundle bundle)
     {
         // Need to wait others sounds to be loaded to avoid Android LoadingPersistentStorage lags
         while (_loadingInProgress)
@@ -351,15 +372,24 @@ public class SoundManager : MonoBehaviour
 
         _loadingInProgress = true;
         smSound.IsPossessedLoading = true;
-        ResourceRequest request = LoadClipAsync("Sounds/" + soundName);
-        while (!request.isDone)
+        AudioClip soundClip = null;
+        if (bundle == null)
         {
-            yield return null;
+            ResourceRequest request = LoadClipAsync("Sounds/" + soundName);
+            while (!request.isDone)
+                yield return null;
+            soundClip = (AudioClip)request.asset;
+        }
+        else
+        {
+            AssetBundleRequest request = LoadClipFromBundleAsync(bundle, soundName);
+            while (!request.isDone)
+                yield return null;
+            soundClip = (AudioClip)request.asset;
         }
         smSound.IsPossessedLoading = false;
         _loadingInProgress = false;
 
-        AudioClip soundClip = (AudioClip)request.asset;
         if (null == soundClip)
         {
             Debug.Log("Sound not loaded: " + soundName);
@@ -534,7 +564,7 @@ public class SoundManager : MonoBehaviour
             yield return null;
         }
 
-        PlaySound(name, pausable);
+        PlaySoundInternal(name, pausable);
     }
 
     AudioClip LoadClip(string name)
@@ -550,6 +580,10 @@ public class SoundManager : MonoBehaviour
         return Resources.LoadAsync<AudioClip>(path);
     }
 
+    AssetBundleRequest LoadClipFromBundleAsync(AssetBundle bundle, string name)
+    {
+        return bundle.LoadAssetAsync<AudioClip>(name);
+    }
 
     void ApplySoundVolume()
     {
@@ -564,6 +598,7 @@ public class SoundManager : MonoBehaviour
         if (_music != null)
         {
             _music.FadingIn = false;
+            _music.TargetVolume = _settings.GetMusicVolumeCorrected();
             _music.Source.volume = _music.TargetVolume;
         }
     }

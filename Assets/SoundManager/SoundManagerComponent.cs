@@ -5,12 +5,12 @@ public class SoundManagerComponent : MonoBehaviour
 {
     public void PlaySound(string name)
     {
-        SoundManager.PlaySound(name, true);
+        SoundManager.PlaySound(name);
     }
 
     public void PlaySoundNotPausable(string name)
     {
-        SoundManager.PlaySound(name, false);
+        SoundManager.PlaySoundUI(name);
     }
 
     public void ChangeSoundVolume(float volume)
