@@ -29,6 +29,16 @@ public class SoundManager : MonoBehaviour
         Instance.StopMusicInternal();
     }
 
+    public static SMSound PlaySound(AudioClip clip)
+    {
+        return Instance.PlaySoundClipInternal(clip, true);
+    }
+
+    public static SMSound PlaySoundUI(AudioClip clip)
+    {
+        return Instance.PlaySoundClipInternal(clip, false);
+    }
+
     public static SMSound PlaySound(string name, AssetBundle bundle)
     {
         return Instance.PlaySoundInternal(name, true);
@@ -277,8 +287,6 @@ public class SoundManager : MonoBehaviour
         sound.IsLoading = true;
         sound.SelfVolume = 1;
 
-        // TODO: Return Non-Null, but invalid SMSound if cant play
-
         if (string.IsNullOrEmpty(soundName)) {
             Debug.Log("Sound null or empty");
             sound.IsValid = false;
@@ -324,6 +332,40 @@ public class SoundManager : MonoBehaviour
 
         sound.LoadingCoroutine = PlaySoundInternalAfterLoad(sound, soundName, bundle);
         StartCoroutine(sound.LoadingCoroutine);
+        return sound;
+    }
+
+    SMSound PlaySoundClipInternal(AudioClip clip, bool pausable)
+    {
+        SMSound sound = new SMSound();
+        sound.Name = clip.name;
+        sound.SelfVolume = 1;
+
+        if (_sounds.Count > 16)
+        {
+            Debug.Log("Too much sounds");
+            sound.IsValid = false;
+            return sound;
+        }
+
+
+        GameObject soundGameObject = new GameObject("Sound: " + sound.Name);
+        AudioSource soundSource = soundGameObject.AddComponent<AudioSource>();
+        soundGameObject.transform.parent = transform;
+
+        sound.Source = soundSource;
+        sound.IsValid = true;
+
+        soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
+        soundSource.priority = 128;
+        soundSource.playOnAwake = false;
+        soundSource.mute = _settings.GetSoundMuted();
+        soundSource.volume = _settings.GetSoundVolumeCorrected();
+        soundSource.ignoreListenerPause = !pausable;
+        soundSource.Play();
+
+        _sounds.Add(sound);
+
         return sound;
     }
 
@@ -402,7 +444,7 @@ public class SoundManager : MonoBehaviour
     void Awake()
     {
         // Only one instance of SoundManager at a time!
-        if (_instance != null)
+        if (_inited)
         {
             Destroy(gameObject);
             return;
