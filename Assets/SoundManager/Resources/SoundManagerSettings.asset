@@ -12,10 +12,12 @@ MonoBehaviour:
   m_Name: SoundManagerSettings
   m_EditorClassIdentifier: 
   AutoPause: 1
-  DefaultMusicVolume: .5
-  DefaultSoundVolume: 1
+  MusicVolumeCorrection: 1
+  SoundVolumeCorrection: 1
   MusicFadeTime: 2
   MusicAudioMixerGroup: {fileID: 24331956, guid: 4cd8705c9141fa0438ec2ab9ffaf3e2c,
     type: 2}
   SoundAudioMixerGroup: {fileID: 24325162, guid: 4cd8705c9141fa0438ec2ab9ffaf3e2c,
     type: 2}
+  PreloadedLoadedClips:
+  - {fileID: 8300000, guid: bc7b5d865395e23498557081b7157c94, type: 3}

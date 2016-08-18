@@ -17,6 +17,7 @@ public class Demo : MonoBehaviour {
 
     public void Click()
     {
+        // Click1 sound preloaded in SoundManagerSettings
         SoundManager.PlaySoundUI("click1").SetVolume(0.8f);
     }
 
@@ -27,5 +28,15 @@ public class Demo : MonoBehaviour {
 
         gamePanel.SetActive(!needPause);
         pausePanel.SetActive(needPause);
+    }
+
+    void OnEnable()
+    {
+        SoundManager.LoadSound("phaserUp1");
+    }
+
+    void OnDisable()
+    {
+        SoundManager.UnloadSound("phaserUp1");
     }
 }

@@ -9,6 +9,14 @@ public class SoundManager : MonoBehaviour
 
     List<SMSound> _sounds = new List<SMSound>();
 
+    struct PreloadedClip
+    {
+        public AudioClip clip;
+        public int level;
+    }
+
+    Dictionary<string, PreloadedClip> _preloadedClips = new Dictionary<string, PreloadedClip>(16);
+
     SMMusic _music;
     string _currentMusicName;
 
@@ -63,6 +71,19 @@ public class SoundManager : MonoBehaviour
     public static void PlaySoundWithDelay(string name, float delay, bool pausable = true)
     {
         Instance.PlaySoundWithDelayInternal(name, delay, pausable);
+    }
+
+    public static void LoadSound(string name)
+    {
+        Instance.LoadSoundInternal(name);
+    }
+
+    public static void UnloadSound(string name, bool force = false)
+    {
+        if (!IsValid()) // Unload can be called from OnDestroy or OnDisable
+            return;
+
+        Instance.UnloadSoundInternal(name, force);
     }
 
     public static void Pause()
@@ -284,7 +305,6 @@ public class SoundManager : MonoBehaviour
     {
         SMSound sound = new SMSound();
         sound.Name = soundName;
-        sound.IsLoading = true;
         sound.SelfVolume = 1;
 
         if (string.IsNullOrEmpty(soundName)) {
@@ -330,8 +350,18 @@ public class SoundManager : MonoBehaviour
 
         _sounds.Add(sound);
 
-        sound.LoadingCoroutine = PlaySoundInternalAfterLoad(sound, soundName, bundle);
-        StartCoroutine(sound.LoadingCoroutine);
+        PreloadedClip preloadedClip;
+        if (_preloadedClips.TryGetValue(soundName, out preloadedClip))
+        {
+            soundSource.clip = preloadedClip.clip;
+            soundSource.Play();
+        }
+        else
+        {
+            sound.LoadingCoroutine = PlaySoundInternalAfterLoad(sound, soundName, bundle);
+            StartCoroutine(sound.LoadingCoroutine);
+        }
+
         return sound;
     }
 
@@ -356,6 +386,7 @@ public class SoundManager : MonoBehaviour
         sound.Source = soundSource;
         sound.IsValid = true;
 
+        soundSource.clip = clip;
         soundSource.outputAudioMixerGroup = _settings.SoundAudioMixerGroup;
         soundSource.priority = 128;
         soundSource.playOnAwake = false;
@@ -371,6 +402,8 @@ public class SoundManager : MonoBehaviour
 
     IEnumerator PlaySoundInternalAfterLoad(SMSound smSound, string soundName, AssetBundle bundle)
     {
+        smSound.IsLoading = true;
+
         // Need to wait others sounds to be loaded to avoid Android LoadingPersistentStorage lags
         while (_loadingInProgress)
         {
@@ -437,6 +470,51 @@ public class SoundManager : MonoBehaviour
             sound.Source.Stop();
     }
 
+    private void LoadSoundInternal(string soundName)
+    {
+        AudioClip clip = LoadClip("Sounds/" + soundName);
+        if (clip != null)
+        {
+            PreloadedClip preloadedClip;
+            if (_preloadedClips.TryGetValue(soundName, out preloadedClip))
+            {
+                preloadedClip.clip = clip;
+                preloadedClip.level += 1;
+            }
+            else
+            {
+                preloadedClip.clip = clip;
+                preloadedClip.level = 1;
+                _preloadedClips.Add(soundName, preloadedClip);
+            }
+        }
+    }
+
+    private void UnloadSoundInternal(string soundName, bool force)
+    {
+        if (force)
+        {
+            _preloadedClips.Remove(soundName);
+            return;
+        }
+
+        PreloadedClip preloadedClip;
+        if (_preloadedClips.TryGetValue(soundName, out preloadedClip))
+        {
+            if (preloadedClip.level > 1)
+            {
+                preloadedClip.level -= 1;
+            }
+            else
+            {
+                _preloadedClips.Remove(soundName);
+            }
+        }
+
+    }
+
+
+
     #endregion // Sound
 
     #region Internal
@@ -456,11 +534,19 @@ public class SoundManager : MonoBehaviour
         _settings = Resources.Load<SoundManagerSettings>("SoundManagerSettings");
         if (_settings == null)
         {
-            Debug.LogWarning("SoundManagerSettings not foundin resources. Using default settings");
+            Debug.LogWarning("SoundManagerSettings not founded resources. Using default settings");
             _settings = ScriptableObject.CreateInstance<SoundManagerSettings>();
         }
 
         _settings.LoadSettings();
+
+        foreach (AudioClip permanentLoadedClip in _settings.PreloadedLoadedClips)
+        {
+            PreloadedClip preloadedClip;
+            preloadedClip.clip = permanentLoadedClip;
+            preloadedClip.level = 1;
+            _preloadedClips.Add(permanentLoadedClip.name, preloadedClip);
+        }
 
         ApplySoundVolume();
         ApplyMusicVolume();

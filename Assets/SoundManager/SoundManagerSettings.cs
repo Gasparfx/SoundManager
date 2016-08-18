@@ -14,6 +14,8 @@ public class SoundManagerSettings : ScriptableObject {
     public AudioMixerGroup MusicAudioMixerGroup;
     public AudioMixerGroup SoundAudioMixerGroup;
 
+    public AudioClip[] PreloadedLoadedClips;
+
     private float _volumeMusic;
     private float _volumeSound;
 
