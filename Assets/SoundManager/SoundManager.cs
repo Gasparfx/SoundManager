@@ -475,6 +475,9 @@ public class SoundManager : MonoBehaviour
         AudioClip clip = LoadClip("Sounds/" + soundName);
         if (clip != null)
         {
+            if (!clip.preloadAudioData)
+                clip.LoadAudioData();
+
             PreloadedClip preloadedClip;
             if (_preloadedClips.TryGetValue(soundName, out preloadedClip))
             {
@@ -492,22 +495,18 @@ public class SoundManager : MonoBehaviour
 
     private void UnloadSoundInternal(string soundName, bool force)
     {
-        if (force)
-        {
-            _preloadedClips.Remove(soundName);
-            return;
-        }
-
         PreloadedClip preloadedClip;
         if (_preloadedClips.TryGetValue(soundName, out preloadedClip))
         {
-            if (preloadedClip.level > 1)
+            if (preloadedClip.level > 1 && !force)
             {
                 preloadedClip.level -= 1;
             }
             else
             {
                 _preloadedClips.Remove(soundName);
+                if (!preloadedClip.clip.preloadAudioData)
+                    preloadedClip.clip.UnloadAudioData();
             }
         }
 
@@ -562,7 +561,7 @@ public class SoundManager : MonoBehaviour
 
         foreach (SMSound sound in _sounds)
         {
-            if (!sound.IsLoading && !sound.Source.isPlaying)
+            if (IsSoundFinished(sound))
             {
                 soundToDelete = sound;
                 break;
@@ -678,6 +677,23 @@ public class SoundManager : MonoBehaviour
     AssetBundleRequest LoadClipFromBundleAsync(AssetBundle bundle, string name)
     {
         return bundle.LoadAssetAsync<AudioClip>(name);
+    }
+
+    bool IsSoundFinished(SMSound sound)
+    {
+        if (sound.IsLoading)
+            return false;
+
+        if (sound.Source.isPlaying)
+            return false;
+
+        if (sound.Source.clip.loadState == AudioDataLoadState.Loading)
+            return false;
+
+        if (!sound.Source.ignoreListenerPause && AudioListener.pause)
+            return false;
+
+        return true;
     }
 
     void ApplySoundVolume()
